@@ -4,9 +4,10 @@ WORKDIR /tmp
 
 COPY ./pyproject.toml ./poetry.lock* /tmp/
 
-RUN curl -sSL https://install.python-poetry.org -o install-poetry.py
+# 更换镜像为国内源
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
-RUN python install-poetry.py --yes
+RUN pip install poetry
 
 ENV PATH="${PATH}:/root/.local/bin"
 
@@ -18,8 +19,12 @@ WORKDIR /app
 
 COPY --from=requirements-stage /tmp/requirements.txt /app/requirements.txt
 
+# 更换镜像为国内源
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+
 RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
 RUN rm requirements.txt
 
 COPY ./ /app/
+
