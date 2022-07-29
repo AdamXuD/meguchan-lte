@@ -6,9 +6,9 @@ __usage__ = """
 触发规则：^惠酱搜[图圖]$ ^惠酱搜上一张[图圖]$
 """
 
-__version__ = '1.0.0'
+__help_version__ = '1.0.0'
 
-__plugin_name__ = "惠酱搜图"
+__help_plugin_name__ = "惠酱搜图"
 
 import traceback
 import re

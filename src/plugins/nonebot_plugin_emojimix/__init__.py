@@ -1,3 +1,13 @@
+__usage__ = """
+惠酱可以缝合两个emoji。
+使用方法：
+发送任意两个即可。
+"""
+
+__help_version__ = '1.0.0'
+
+__help_plugin_name__ = "惠酱pixiv"
+
 from nonebot import on_regex
 from nonebot.params import RegexDict
 from nonebot.adapters.onebot.v11 import MessageSegment, Event

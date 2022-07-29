@@ -1,11 +1,16 @@
-import traceback
-import aiohttp
+__usage__ = """
+惠酱可以查询对应pid的Pixiv图片。
+使用方法：
+发送 "惠酱p站 <pid>" 可向惠酱查询对应pid的Pixiv图片（无需代理）。
+"""
+
+__help_version__ = '1.0.0'
+
+__help_plugin_name__ = "惠酱pixiv"
+
 from nonebot import get_driver
-from nonebot.log import logger
 from nonebot.plugin import on_regex
 from nonebot.params import RegexDict
-from nonebot.adapters.onebot.v11 import Bot, MessageEvent, GroupMessageEvent, Message, MessageSegment
-from nonebot.typing import T_State
 
 from .config import Config
 
