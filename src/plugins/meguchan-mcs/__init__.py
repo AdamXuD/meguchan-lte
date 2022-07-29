@@ -135,7 +135,9 @@ async def _(msg: dict = RegexDict()):
             if status:
                 server = MinecraftServer(item.info.host, item.info.query_port)
                 try:
-                    players = ", ".join(server.status().players.names)
+                    players = ", ".join(
+                        [item.name for item in server.status().players.sample]
+                    )
                 except:
                     players = ", ".join(server.query().players.names)
                 message = (
