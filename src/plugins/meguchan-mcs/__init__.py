@@ -134,7 +134,10 @@ async def _(msg: dict = RegexDict()):
             ping, status = await pingServer(item.info.host, item.info.query_port)
             if status:
                 server = MinecraftServer(item.info.host, item.info.query_port)
-                players = ", ".join(server.query().players.names)
+                try:
+                    players = ", ".join(server.status().players.names)
+                except:
+                    players = ", ".join(server.query().players.names)
                 message = (
                     "【服务器状态如下】\n"
                     + f"Name: {item.info.name}\n"
