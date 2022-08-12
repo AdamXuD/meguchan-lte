@@ -14,7 +14,6 @@ nonebot-plugin-gocqhttp = "^0.4.6"
 
 emoji = "^1.7.0"
 aiohttp = "^3.8.1"
-mcstatus = "^9.2.0"
 aio-mc-rcon = "^3.1.1"
 nonebot-plugin-help = "^0.3.1"
 nonebot-plugin-apscheduler = "^0.1.3"

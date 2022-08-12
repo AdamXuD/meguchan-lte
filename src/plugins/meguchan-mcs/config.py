@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Extra
 
 from nonebot.log import logger
@@ -12,7 +12,6 @@ class Config(BaseModel, extra=Extra.ignore):
 
 class ServerInfo(BaseModel):
     host: str = ""
-    query_port: int = 0
     rcon_port: int = 0
     rcon_password: str = ""
     name: str = ""
@@ -25,7 +24,7 @@ class _ServerItem(BaseModel):
     status: Optional[bool] = None
 
 
-serverList: Optional[List[_ServerItem]] = None
+serverDict: Dict[str, _ServerItem] = {}
 
 path = Path("./data/minecraftServerList.json")
 if not path.is_file():
@@ -36,25 +35,35 @@ if not path.is_file():
 
 try:
     with open(path, "r") as f:
-        serverList = [_ServerItem.parse_obj({
-            "info": item,
-            "status": None,
-        }) for item in json.load(f)]
+        serverDict.update({
+            item["name"]: _ServerItem.parse_obj({
+                "info": item,
+                "status": None,
+            }) for item in json.load(f)
+        })
 except:
     logger.warning("minecraftServerList.json is not a valid json file.")
-    serverList = []
+    serverDict = {}
 
 
 def appendServer(info, status):
-    serverList.append(_ServerItem.parse_obj({
-        "info": info,
-        "status": status,
-    }))
-    with open(path, "w") as f:
-        json.dump([server.info.dict() for server in serverList], f)
+    serverDict.update({
+        info.name: _ServerItem.parse_obj({
+            "info": info,
+            "status": status,
+        })
+    })
+    try:
+        with open(path, "w") as f:
+            json.dump([item.info.dict() for item in serverDict.values()], f)
+    except:
+        logger.warning("minecraftServerList.json is not valid.")
 
 
-def removeServer(obj):
-    serverList.remove(obj)
-    with open(path, "w") as f:
-        json.dump([server.info.dict() for server in serverList], f)
+def removeServer(name):
+    serverDict.pop(name)
+    try:
+        with open(path, "w") as f:
+            json.dump([item.info.dict() for item in serverDict.values()], f)
+    except:
+        logger.warning("minecraftServerList.json is not valid.")

@@ -11,28 +11,46 @@ __help_version__ = '1.0.0'
 __help_plugin_name__ = "惠酱mc"
 
 
-from html import unescape
 import json
+import time
+from typing import List, Optional
+from html import unescape
 
-from mcstatus import MinecraftServer
 from aiomcrcon import Client
 import nonebot
 from nonebot.plugin import require, on_regex
 from nonebot.adapters.onebot.v11 import MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from nonebot.params import RegexDict
 
-from .config import ServerInfo, Config, appendServer, removeServer, serverList
+from .config import ServerInfo, Config, appendServer, removeServer, serverDict
 
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 meguchan_config = Config.parse_obj(nonebot.get_driver().config.dict())
 
 
-async def pingServer(host, queryPort):
+async def pingServer(host: str, queryPort: int, password: str):
+    startTime = time.time()
     try:
-        return await MinecraftServer(host, queryPort).async_ping(), True
+        async with Client(host, queryPort, password):
+            return (time.time() - startTime) / 2, True
     except:
-        return None, False
+        return -1, False
+
+
+def createMsg(title: str, info: ServerInfo, status: bool, ping: float, other: Optional[str] = None):
+    return (
+        f"【{title}】\n"
+        + f"Name: {info.name}\n"
+        + f"Host: {info.host}\n"
+        + f"Status: {'On' if status else 'Off'}"
+        + (f"\nPing: {round(ping * 1000, 3)}ms" if status else "")
+        + (f"\n{other}" if other else "")
+    )
+
+
+def getManagers(managers: List[int]):
+    return [meguchan_config.meguchan_admin_id] + managers
 
 
 @scheduler.scheduled_job("cron", minute="*/1", id="mcstatus")
@@ -42,33 +60,30 @@ async def _():
     except:
         return
 
-    for item in serverList:
-        ping, status = await pingServer(item.info.host, item.info.query_port)
-
+    for item in serverDict.values():
+        ping, status = await pingServer(
+            item.info.host,
+            item.info.rcon_port,
+            item.info.rcon_password
+        )
         if item.status == None:
             item.status = status
             continue
-        if status != item.status:
-            item.status = status
-            groups = item.info.established_groups
-            message = (
-                "【服务器状态发生变化】\n"
-                + f"Name: {item.info.name}\n"
-                + f"Host: {item.info.host}\n"
-                + f"Status: {'On' if status else 'Off'}\n"
-                + f"Ping: {round(ping, 5)}ms" if status else ""
+        if item.status == status:
+            continue
+
+        item.status = status
+        message = createMsg("服务器状态发生变化", item.info, status, ping)
+        for group in item.info.established_groups:
+            await bot.send_msg(
+                group_id=group,
+                message=message,
             )
-            for group in groups:
-                await bot.send_msg(
-                    group_id=group,
-                    message=message,
-                )
-            managers = [meguchan_config.meguchan_admin_id] + item.info.managers
-            for manager in managers:
-                await bot.send_msg(
-                    user_id=manager,
-                    message=message,
-                )
+        for manager in getManagers(item.info.managers):
+            await bot.send_msg(
+                user_id=manager,
+                message=message,
+            )
 
 
 fetchTemplate = on_regex("^/mc template$")
@@ -84,27 +99,25 @@ addServer = on_regex("^/mc adds `(?P<info>.*)`")
 
 @addServer.handle()
 async def _(event: MessageEvent, msg: dict = RegexDict()):
-    if int(event.get_user_id()) != meguchan_config.meguchan_admin_id:
+    if event.user_id != meguchan_config.meguchan_admin_id:
         return await addServer.finish("你不是惠酱管理员，不能添加服务器~")
 
     info = unescape(msg["info"])
+
     try:
         info = ServerInfo.parse_obj(json.loads(info))
-        for item in serverList:
-            if item.info.name == info.name:
-                return await addServer.finish("服务器已存在~")
-
-        ping, status = await pingServer(info.host, info.query_port)
-        appendServer(info, status)
-        message = (
-            "【服务器添加成功】\n"
-            + f"Name: {info.name}\n"
-            + f"Host: {info.host}\n"
-            + f"Status: {'On' if status else 'Off'}\n"
-            + f"Ping: {round(ping, 5)}ms" if status else ""
+        if serverDict.get(info.name):
+            return await addServer.finish("同名服务器已存在~")
+        ping, status = await pingServer(
+            info.host,
+            info.rcon_port,
+            info.rcon_password
         )
+        appendServer(info, status)
+        message = createMsg("服务器添加成功", info, status, ping)
     except:
         message = "无效的服务器信息"
+
     return await addServer.finish(message)
 
 
@@ -114,12 +127,15 @@ deleteServer = on_regex("^/mc dels (?P<name>[a-zA-Z0-9]*)$")
 @deleteServer.handle()
 async def _(event: MessageEvent, msg: dict = RegexDict()):
     name = msg["name"]
-    for item in serverList:
-        if item.info.name == name:
-            if int(event.get_user_id()) not in [meguchan_config.meguchan_admin_id] + item.info.managers:
-                return await deleteServer.finish("你不是该服务器管理员，不能删除该服务器~")
-            removeServer(item)
+
+    if item := serverDict.get(name):
+        managers = getManagers(item.info.managers)
+        if event.user_id not in managers:
+            return await deleteServer.finish("你不是该服务器管理员，不能删除该服务器~")
+        else:
+            removeServer(name)
             return await deleteServer.finish("服务器删除成功~")
+
     return await deleteServer.finish("服务器不存在~")
 
 
@@ -129,33 +145,30 @@ checkStatus = on_regex("^/mc check (?P<name>[a-zA-Z0-9]*)$")
 @checkStatus.handle()
 async def _(msg: dict = RegexDict()):
     name = msg["name"]
-    for item in serverList:
-        if item.info.name == name:
-            ping, status = await pingServer(item.info.host, item.info.query_port)
-            if status:
-                server = MinecraftServer(item.info.host, item.info.query_port)
-                try:
-                    players = ", ".join(
-                        [item.name for item in server.status().players.sample]
-                    )
-                except:
-                    players = ", ".join(server.query().players.names)
-                message = (
-                    "【服务器状态如下】\n"
-                    + f"Name: {item.info.name}\n"
-                    + f"Host: {item.info.host}\n"
-                    + f"Status: {'On' if status else 'Off'}\n"
-                    + f"Ping: {round(ping, 5)}ms\n"
-                    + f"Players: {players}\n"
-                )
-            else:
-                message = (
-                    "【服务器状态如下】\n"
-                    + f"Name: {item.info.name}\n"
-                    + f"Host: {item.info.host}\n"
-                    + f"Status: {'On' if status else 'Off'}"
-                )
-            return await checkStatus.finish(message)
+
+    if item := serverDict.get(name):
+        try:
+            startTime = time.time()
+            async with Client(
+                item.info.host,
+                item.info.rcon_port,
+                item.info.rcon_password
+            ) as c:
+                ping, status = (time.time() - startTime) / 2, True
+                other = (await c.send_cmd("list"))[0]
+        except:
+            ping, status, other = -1, False, None
+
+        return await checkStatus.finish(
+            createMsg(
+                "服务器状态如下",
+                item.info,
+                status,
+                ping,
+                other
+            )
+        )
+
     return await checkStatus.finish("服务器不存在~")
 
 
@@ -165,14 +178,24 @@ listServer = on_regex("^/mc list$")
 @listServer.handle()
 async def _(event: MessageEvent):
     message = ("【订阅的服务器列表】\n")
-    for item in serverList:
-        if (isinstance(event, GroupMessageEvent) and event.group_id in item.info.established_groups) or\
-                (isinstance(event, PrivateMessageEvent) and event.get_user_id() in item.info.managers + [meguchan_config.meguchan_admin_id]):
-            message += (
-                f"Name: {item.info.name}\n"
-                + f"Host: {item.info.host}\n"
-                + f"Status: {'On' if item.status else 'Off'}\n\n"
-            )
+
+    for item in serverDict.values():
+        if isinstance(
+            event, GroupMessageEvent
+        ) and (event.group_id not in item.info.established_groups):
+            continue
+        if isinstance(
+            event, PrivateMessageEvent
+        ) and (event.user_id not in getManagers(item.info.managers)):
+            continue
+
+        ping, status = await pingServer(
+            item.info.host,
+            item.info.rcon_port,
+            item.info.rcon_password
+        )
+        message += f"{createMsg('=====', item.info, status, ping)}\n"
+
     return await listServer.finish(message)
 
 
@@ -184,11 +207,30 @@ async def _(event: MessageEvent, msg: dict = RegexDict()):
     cmd = msg["cmd"]
     name = msg["name"]
 
-    for item in serverList:
-        if item.info.name == name:
-            if int(event.get_user_id()) not in [meguchan_config.meguchan_admin_id] + item.info.managers:
-                return await addServer.finish("您未被指定为该服务器管理员，不能使用命令~")
-            async with Client(item.info.host, item.info.rcon_port, item.info.rcon_password) as c:
-                resp = (await c.send_cmd(cmd))[0]
-                return await executeCmd.finish(f"{name}: {resp if len(resp) < 100 else resp[0: 100] + '...'}")
+    if item := serverDict.get(name):
+        if event.user_id not in getManagers(item.info.managers):
+            return await addServer.finish("您未被指定为该服务器管理员，不能使用命令~")
+        try:
+            startTime = time.time()
+            async with Client(
+                item.info.host,
+                item.info.rcon_port,
+                item.info.rcon_password
+            ) as c:
+                ping, status = (time.time() - startTime) / 2, True
+                other = f"Response: {((await c.send_cmd(cmd))[0])[0: 100]}"
+        except:
+            ping, status = -1, False
+            other = "Error: Timeout"
+
+        return await executeCmd.finish(
+            createMsg(
+                "服务器执行命令如下",
+                item.info,
+                status,
+                ping,
+                other
+            )
+        )
+
     return await executeCmd.finish("服务器不存在~")
