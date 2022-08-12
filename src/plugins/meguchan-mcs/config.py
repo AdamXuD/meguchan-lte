@@ -25,25 +25,7 @@ class _ServerItem(BaseModel):
 
 
 serverDict: Dict[str, _ServerItem] = {}
-
-path = Path("./data/minecraftServerList.json")
-if not path.is_file():
-    Path.mkdir(path.parent, parents=True, exist_ok=True)
-    path.touch(exist_ok=True)
-    with open(path, 'w') as f:
-        json.dump([], f)
-
-try:
-    with open(path, "r") as f:
-        serverDict.update({
-            item["name"]: _ServerItem.parse_obj({
-                "info": item,
-                "status": None,
-            }) for item in json.load(f)
-        })
-except:
-    logger.warning("minecraftServerList.json is not a valid json file.")
-    serverDict = {}
+path = None
 
 
 def appendServer(info, status):
@@ -67,3 +49,25 @@ def removeServer(name):
             json.dump([item.info.dict() for item in serverDict.values()], f)
     except:
         logger.warning("minecraftServerList.json is not valid.")
+
+
+def initServerDict(p="./data/minecraftServerList.json"):
+    global serverDict, path
+    path = Path(p)
+    if not path.is_file():
+        Path.mkdir(path.parent, parents=True, exist_ok=True)
+        path.touch(exist_ok=True)
+        with open(path, 'w') as f:
+            json.dump([], f)
+
+    try:
+        with open(path, "r") as f:
+            serverDict.update({
+                item["name"]: _ServerItem.parse_obj({
+                    "info": item,
+                    "status": None,
+                }) for item in json.load(f)
+            })
+    except:
+        logger.warning("minecraftServerList.json is not a valid json file.")
+        serverDict = {}

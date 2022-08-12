@@ -22,11 +22,12 @@ from nonebot.plugin import require, on_regex
 from nonebot.adapters.onebot.v11 import MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from nonebot.params import RegexDict
 
-from .config import ServerInfo, Config, appendServer, removeServer, serverDict
+from .config import ServerInfo, Config, appendServer, initServerDict, removeServer, serverDict
 
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 meguchan_config = Config.parse_obj(nonebot.get_driver().config.dict())
+initServerDict()
 
 
 async def pingServer(host: str, queryPort: int, password: str):
